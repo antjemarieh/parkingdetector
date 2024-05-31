@@ -1,0 +1,81 @@
+import cv2
+import numpy as np
+
+def apply_dynamic_threshold(image):
+    # Convert image to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Apply Gaussian blur
+    blurred = cv2.GaussianBlur(gray, (7, 7), 0)
+    # Use Otsu's method to calculate the optimal threshold value
+    _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return thresh
+
+def apply_morphology(thresh):
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+    return closed
+
+def is_car(contour):
+    if cv2.contourArea(contour) < 100:
+        return False
+    rect = cv2.minAreaRect(contour)
+    width, height = rect[1]
+    if width == 0 or height == 0:
+        return False
+    area = cv2.contourArea(contour)
+    aspect_ratio = max(width, height) / min(width, height)
+    fill_ratio = area / (width * height)
+    return 1.2 < aspect_ratio < 2.5 and fill_ratio > 0.6 and 500 < area < 3000
+
+def is_parking_space(contour):
+    if cv2.contourArea(contour) < 500:
+        return False
+    rect = cv2.minAreaRect(contour)
+    width, height = rect[1]
+    if width == 0 or height == 0:
+        return False
+    area = cv2.contourArea(contour)
+    aspect_ratio = max(width, height) / min(width, height)
+    fill_ratio = area / (width * height)
+    return 2 < aspect_ratio < 4 and fill_ratio > 0.7
+
+image = cv2.imread('/Users/rabandiyardana/Desktop/try5.png')
+if image is None:
+    print("Image load failed. Check the path.")
+    exit()
+
+def apply_advanced_preprocessing(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (7, 7), 0)
+    edges = cv2.Canny(blurred, 50, 150)
+    dilated = cv2.dilate(edges, np.ones((3,3), np.uint8), iterations=1)
+    return dilated
+
+# Apply dynamic thresholding and morphological operations
+thresh = apply_dynamic_threshold(image)
+morphed = apply_morphology(thresh)
+
+# Find contours on the morphed image
+contours, _ = cv2.findContours(morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+# Filter contours to identify cars and parking spaces
+cars = [cv2.minAreaRect(contour) for contour in contours if is_car(contour)]
+parking_spaces = [cv2.minAreaRect(contour) for contour in contours if is_parking_space(contour)]
+
+# Debug: Visualize detected cars and spaces
+for car in cars:
+    box = cv2.boxPoints(car)
+    box = np.int0(box)
+    cv2.drawContours(image, [box], 0, (255, 0, 0), 2)  # Red for cars
+
+for space in parking_spaces:
+    box = cv2.boxPoints(space)
+    box = np.int0(box)
+    cv2.drawContours(image, [box], 0, (0, 255, 0), 2)  # Green for parking spaces
+
+# Visualization of each processing step
+cv2.imshow('Blurred Image', blurred)
+cv2.imshow('Edge Detection', edges)
+cv2.imshow('Dilated Edges', dilated)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
